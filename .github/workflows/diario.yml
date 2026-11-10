@@ -1,0 +1,78 @@
+name: Diário do Filhote
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # todo dia 05:00 (Brasília): produz os vídeos do dia
+    - cron: "0 7 * * 1"   # segunda 04:00 (Brasília): completa a pauta da semana
+  workflow_dispatch:
+    inputs:
+      tarefa:
+        description: "O que rodar"
+        type: choice
+        options: [videos, pauta]
+        default: videos
+      quantidade:
+        description: "Quantos vídeos (só para 'videos')"
+        default: "3"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diario
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      VIDEOS_POR_DIA: ${{ github.event.inputs.quantidade || vars.VIDEOS_POR_DIA || '3' }}
+      HORARIOS: ${{ vars.HORARIOS || '10:00,16:00,19:00' }}
+      VOZ: ${{ vars.VOZ || 'pt-BR-AntonioNeural' }}
+      TZ: America/Sao_Paulo
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q -r requirements.txt
+          mkdir -p fonts
+          curl -sfL -o fonts/Baloo2.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/baloo2/Baloo2%5Bwght%5D.ttf"
+          curl -sfL -o fonts/Nunito.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf"
+
+      - name: Completar pauta da semana
+        if: github.event.schedule == '0 7 * * 1' || github.event.inputs.tarefa == 'pauta'
+        run: python scripts/pauta_semanal.py
+
+      - name: Produzir vídeos
+        if: github.event.schedule == '0 8 * * *' || github.event.inputs.tarefa == 'videos'
+        run: python scripts/gerar.py
+
+      - name: Publicar vídeos (release)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ls saida/*.mp4 >/dev/null 2>&1; then
+            TAG="videos-$(date +%Y-%m-%d-%H%M)"
+            gh release create "$TAG" saida/*.mp4 saida/*.txt \
+              --title "Vídeos $(date +%d/%m/%Y)" \
+              --notes-file saida/LEIA.md
+          else
+            echo "Nenhum vídeo novo."
+          fi
+
+      - name: Salvar pauta atualizada
+        if: always()
+        run: |
+          git config user.name "diario-bot"
+          git config user.email "diario-bot@users.noreply.github.com"
+          git add pauta.csv
+          git diff --cached --quiet || (git commit -m "pauta: atualizada $(date +%d/%m %H:%M)" && git push)
