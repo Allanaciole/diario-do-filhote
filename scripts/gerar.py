@@ -160,23 +160,59 @@ def escrever_roteiro(item):
     return r
 
 
-# ---------------------------------------------------------------- imagens (Pollinations)
+# ---------------------------------------------------------------- imagens (Cloudflare grátis, Pollinations reserva)
 
-def gerar_imagem(prompt, destino, seed):
+CF_CONTA = os.environ.get("CF_ACCOUNT_ID", "").strip()
+CF_TOKEN = os.environ.get("CF_API_TOKEN", "").strip()
+_ultimo_pollinations = [0.0]
+
+
+def imagem_cloudflare(prompt, destino, seed):
+    """FLUX.1 schnell no Workers AI: 10 mil neurons grátis por dia (~170 imagens)."""
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_CONTA}/ai/run/@cf/black-forest-labs/flux-1-schnell"
+    corpo = {"prompt": prompt[:2000], "steps": 6, "seed": seed}
+    for tentativa in range(3):
+        try:
+            r = requests.post(url, headers={"Authorization": f"Bearer {CF_TOKEN}"}, json=corpo, timeout=120)
+            if r.status_code == 200:
+                b64 = (r.json().get("result") or {}).get("image")
+                if b64:
+                    import base64
+                    destino.write_bytes(base64.b64decode(b64))
+                    Image.open(destino).convert("RGB").save(destino, "JPEG", quality=92)
+                    return True
+            log(f"Cloudflare {r.status_code}: {r.text[:200]}")
+        except requests.RequestException as e:
+            log("Cloudflare erro:", e)
+        time.sleep(10 * (tentativa + 1))
+    return False
+
+
+def imagem_pollinations(prompt, destino, seed):
+    """API sem chave: 1 pedido a cada ~45 s por IP; às vezes recusa (402) em servidores compartilhados."""
     url = "https://image.pollinations.ai/prompt/" + urllib.parse.quote(prompt[:1500])
-    params = {"width": 1080, "height": 1920, "model": "flux", "nologo": "true", "seed": seed, "enhance": "false"}
-    for tentativa in range(5):
+    params = {"width": 1080, "height": 1920, "nologo": "true", "seed": seed}
+    for tentativa in range(3):
+        espera = 50 - (time.time() - _ultimo_pollinations[0])
+        if espera > 0:
+            time.sleep(espera)
+        _ultimo_pollinations[0] = time.time()
         try:
             r = requests.get(url, params=params, timeout=240)
             if r.status_code == 200 and r.headers.get("content-type", "").startswith("image") and len(r.content) > 15000:
                 destino.write_bytes(r.content)
                 Image.open(destino).convert("RGB").save(destino, "JPEG", quality=92)
                 return True
-            log(f"Pollinations {r.status_code} ({len(r.content)} bytes)")
+            log(f"Pollinations {r.status_code}: {r.text[:200]}")
         except requests.RequestException as e:
             log("Pollinations erro:", e)
-        time.sleep(15 * (tentativa + 1))
     return False
+
+
+def gerar_imagem(prompt, destino, seed):
+    if CF_CONTA and CF_TOKEN and imagem_cloudflare(prompt, destino, seed):
+        return True
+    return imagem_pollinations(prompt, destino, seed)
 
 
 def imagem_reserva(destino, i):
@@ -381,7 +417,6 @@ def produzir(item, roteiro):
             log("Imagem reserva na cena", i + 1)
             imagem_reserva(destino, i)
         imgs.append(destino)
-        time.sleep(6)
 
     clipes = []
     for i, cena in enumerate(roteiro["cenas"]):
