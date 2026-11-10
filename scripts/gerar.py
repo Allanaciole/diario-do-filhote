@@ -139,12 +139,21 @@ def roteiro_pronto(notas):
 def escrever_roteiro(item):
     pedido = (f"Série: {item['serie']}\nParte/idade: {item['parte'] or '-'}\n"
               f"Tema: {item['tema']}\nNotas: {item['notas'] or '-'}")
-    r = gemini(PROMPT_ROTEIRO, pedido)
     fixo = roteiro_pronto(item["notas"])
+    try:
+        r = gemini(PROMPT_ROTEIRO, pedido)
+    except Exception as e:  # noqa: BLE001
+        if not fixo:
+            raise
+        log("Sem Gemini, usando o roteiro pronto com imagens padrão:", e)
+        r = {"cenas": [], "legenda": f"{item['tema']}. E o seu filhote, como foi?",
+             "hashtags": ["#filhote", "#cachorro", "#tutordepet", "#diariodofilhote"]}
     if fixo:  # garante as falas exatamente como foram escritas
         r["titulo_l1"], r["titulo_l2"], r["tag"], r["cta_fala"] = fixo["titulo_l1"], fixo["titulo_l2"], fixo["tag"], fixo["cta_fala"]
         cenas = r.get("cenas") or []
-        r["cenas"] = [{"fala": f, "imagem": (cenas[i]["imagem"] if i < len(cenas) else "the puppy at home")}
+        padrao = ["the puppy looking curious at home", "the puppy playing on the living room floor",
+                  "close-up of the puppy's expressive face", "the puppy resting in a cozy bed"]
+        r["cenas"] = [{"fala": f, "imagem": (cenas[i].get("imagem") if i < len(cenas) else padrao[i % 4])}
                       for i, f in enumerate(fixo["cenas"])]
     if len(r.get("cenas") or []) < 3:
         raise RuntimeError("Roteiro sem cenas suficientes")
