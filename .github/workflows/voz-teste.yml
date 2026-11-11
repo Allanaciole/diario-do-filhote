@@ -1,0 +1,53 @@
+name: Teste de vozes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  vozes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q edge-tts==7.3.1
+      - name: Gerar vozes
+        shell: python
+        run: |
+          import asyncio, json, os, edge_tts
+          FALAS = [
+            "Hoje me tiraram da minha mãe e me colocaram numa caixa.",
+            "A caixa andou, balançou e parou numa casa que cheira a sabão e a frango.",
+            "Uma mão enorme me pegou. Eu fiz xixi nela. Ninguém brigou comigo.",
+            "Aí apontaram pra uma caminha e disseram: essa é sua. Eu não acreditei. Até a noite chegar.",
+            "Segue pra ver o que aconteceu de noite.",
+          ]
+          VARIANTES = {
+            "antonio": ("pt-BR-AntonioNeural", "+5%", "+0Hz"),
+            "antonio_jovem": ("pt-BR-AntonioNeural", "+8%", "+18Hz"),
+            "francisca": ("pt-BR-FranciscaNeural", "+5%", "+0Hz"),
+            "thalita": ("pt-BR-ThalitaMultilingualNeural", "+5%", "+0Hz"),
+          }
+          os.makedirs("out", exist_ok=True)
+          async def main():
+              vs = await edge_tts.list_voices()
+              json.dump([v["ShortName"] for v in vs if v["Locale"].startswith("pt")], open("out/vozes.json", "w"))
+              for nome, (voz, rate, pitch) in VARIANTES.items():
+                  for i, fala in enumerate(FALAS):
+                      try:
+                          com = edge_tts.Communicate(fala, voz, rate=rate, pitch=pitch, boundary="WordBoundary")
+                          pal = []
+                          with open(f"out/{nome}_{i}.mp3", "wb") as f:
+                              async for ch in com.stream():
+                                  if ch["type"] == "audio":
+                                      f.write(ch["data"])
+                                  elif ch["type"] == "WordBoundary":
+                                      pal.append([ch["offset"] / 1e7, (ch["offset"] + ch["duration"]) / 1e7, ch["text"]])
+                          json.dump(pal, open(f"out/{nome}_{i}.json", "w"), ensure_ascii=False)
+                      except Exception as e:
+                          print("falhou", nome, i, e)
+          asyncio.run(main())
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vozes
+          path: out/
