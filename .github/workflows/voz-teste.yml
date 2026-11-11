@@ -3,6 +3,9 @@ name: Teste de vozes
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   vozes:
     runs-on: ubuntu-latest
@@ -47,7 +50,7 @@ jobs:
                       except Exception as e:
                           print("falhou", nome, i, e)
           asyncio.run(main())
-      - uses: actions/upload-artifact@v4
-        with:
-          name: vozes
-          path: out/
+      - name: Publicar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "vozes-$(date +%H%M%S)" out/* --prerelease --title "Teste de vozes" -R "$GITHUB_REPOSITORY"
