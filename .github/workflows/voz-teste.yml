@@ -19,17 +19,14 @@ jobs:
         run: |
           import asyncio, json, os, edge_tts
           FALAS = [
-            "Hoje me tiraram da minha mãe e me colocaram numa caixa.",
-            "A caixa andou, balançou e parou numa casa que cheira a sabão e a frango.",
-            "Uma mão enorme me pegou. Eu fiz xixi nela. Ninguém brigou comigo.",
-            "Aí apontaram pra uma caminha e disseram: essa é sua. Eu não acreditei. Até a noite chegar.",
-            "Segue pra ver o que aconteceu de noite.",
+            "Seu filhote chora a noite inteira? Não é manha.",
+            "Ele dormia grudado na mãe e nos irmãos. Agora acordou sozinho num lugar estranho.",
+            "Nas primeiras noites, deixe a caminha perto da sua cama, com uma roupa com o seu cheiro.",
+            "Antes de dormir, brincadeira e xixi. No chorinho, acalme só com a voz, sem festa.",
+            "Salva pra hoje à noite.",
           ]
           VARIANTES = {
-            "antonio": ("pt-BR-AntonioNeural", "+5%", "+0Hz"),
             "antonio_jovem": ("pt-BR-AntonioNeural", "+8%", "+18Hz"),
-            "francisca": ("pt-BR-FranciscaNeural", "+5%", "+0Hz"),
-            "thalita": ("pt-BR-ThalitaMultilingualNeural", "+5%", "+0Hz"),
           }
           os.makedirs("out", exist_ok=True)
           async def main():
